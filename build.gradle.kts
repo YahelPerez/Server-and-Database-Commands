@@ -10,15 +10,17 @@ repositories {
 }
 
 dependencies {
-        // We removed the Apache HttpClient dependency.
+    // For parsing JSON responses from the API
+    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.formdev:flatlaf:3.2.5")
 
-        // For parsing JSON responses from the API
-        implementation("com.google.code.gson:gson:2.10.1")
+    // JDBC driver for PostgreSQL, needed only at runtime
+    runtimeOnly("org.postgresql:postgresql:42.6.0")
 
-        // --- Existing test dependencies ---
-        testImplementation(platform("org.junit:junit-bom:5.10.0"))
-        testImplementation("org.junit.jupiter:junit-jupiter")
-        testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // --- Existing test dependencies ---
+    testImplementation(platform("org.junit:junit-bom:5.10.0"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {

@@ -8,63 +8,51 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Service class responsible for all communication with the SerpApi Google Scholar API.
- * This implementation uses Java 11's built-in HttpClient for making network requests.
- */
 public class ScholarApiService {
 
-    /**
-     * IMPORTANT: This is a placeholder for your personal SerpApi key.
-     */
+    // ... (API_KEY and BASE_URL remain the same)
     private static final String API_KEY = "4825f2f5994c363fd811bb8add5d7a1e26413f9e62ee7ceff1b6163241e2ac94";
-
-    /**
-     * The base URL for all SerpApi search requests.
-     */
     private static final String BASE_URL = "https://serpapi.com/search.json";
 
-    /**
-     * A single, reusable HttpClient instance. It's more efficient to create it
-     * once and reuse it for multiple requests.
-     */
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    /**
-     * Searches for academic articles by a specific author using the SerpApi Google Scholar engine.
-     *
-     * @param authorName The name of the author to search for (e.g., "Geoffrey Hinton").
-     * @return The raw JSON string response from the API upon a successful request.
-     * @throws IOException if a network error occurs or if the API returns a non-successful status code.
-     * @throws InterruptedException if the sending thread is interrupted.
-     */
-    public String searchAuthor(String authorName) throws IOException, InterruptedException {
-        // Build the specific query string for Google Scholar to search by author.
-        // We encode it to ensure special characters and spaces are handled correctly in the URL.
+    public String searchAuthorByName(String authorName) throws IOException, InterruptedException {
         String encodedQuery = URLEncoder.encode("author:\"" + authorName + "\"", StandardCharsets.UTF_8);
-
-        // Construct the final, complete URL for the API request.
         String url = String.format("%s?engine=google_scholar&q=%s&api_key=%s",
-                BASE_URL,
-                encodedQuery,
-                API_KEY);
+                BASE_URL, encodedQuery, API_KEY);
+        return sendRequest(url);
+    }
 
-        // Build the HTTP GET request using Java's HttpRequest builder.
+    public String searchAuthorById(String authorId) throws IOException, InterruptedException {
+        String url = String.format("%s?engine=google_scholar_author&author_id=%s&api_key=%s",
+                BASE_URL, authorId, API_KEY);
+        return sendRequest(url);
+    }
+
+    /**
+     * NEW METHOD: Searches for articles related to a general topic.
+     * @param topic The topic to search for (e.g., "machine learning").
+     * @return The raw JSON string with a list of articles.
+     * @throws IOException if a network error occurs.
+     * @throws InterruptedException if the operation is interrupted.
+     */
+    public String searchByTopic(String topic) throws IOException, InterruptedException {
+        String encodedQuery = URLEncoder.encode(topic, StandardCharsets.UTF_8);
+        String url = String.format("%s?engine=google_scholar&q=%s&api_key=%s",
+                BASE_URL, encodedQuery, API_KEY);
+        return sendRequest(url);
+    }
+
+    private String sendRequest(String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url)) // Set the URL for the request.
-                .GET()               // Specify that this is a GET request.
-                .build();            // Create the immutable request object.
-
-        // Send the request synchronously and receive the response.
-        // The response body will be handled as a String.
+                .uri(URI.create(url))
+                .GET()
+                .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        // Check if the HTTP status code indicates success (typically 200 OK).
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
-            // If the request was successful, return the JSON payload from the response body.
             return response.body();
         } else {
-            // If the request failed, throw an exception with the status code and error message from the body.
             throw new IOException("API request failed with status code: " + response.statusCode() +
                     " and message: " + response.body());
         }

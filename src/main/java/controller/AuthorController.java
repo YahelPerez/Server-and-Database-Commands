@@ -1,65 +1,122 @@
 package controller;
 
+import com.google.gson.Gson;
+import database.DatabaseManager;
+import model.Article;
+import model.ScholarApiResponse;
 import service.ScholarApiService;
 import view.AuthorView;
-import javax.swing.SwingWorker;
+
+import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 public class AuthorController {
 
     private final AuthorView view;
     private final ScholarApiService apiService;
+    private final Gson gson;
 
     public AuthorController(AuthorView view) {
         this.view = view;
         this.apiService = new ScholarApiService();
-        this.view.getSearchButton().addActionListener(new SearchListener());
+        this.gson = new Gson();
+
+        // Add listeners for all three buttons
+        this.view.getSearchByAuthorButton().addActionListener(new SearchListener(this::searchByAuthorOrId));
+        this.view.getSearchByTopicButton().addActionListener(new SearchListener(this::searchByTopic));
+
+        this.view.getClearButton().addActionListener(e -> {
+            view.getSearchField().setText("");
+            view.getResultsList().setModel(new DefaultListModel<>());
+        });
     }
 
+    // --- Search Logic Methods ---
+    private String searchByAuthorOrId() throws Exception {
+        String searchText = view.getSearchField().getText();
+        if (searchText.matches("^[a-zA-Z0-9_-]{12}$")) {
+            return apiService.searchAuthorById(searchText);
+        } else {
+            return apiService.searchAuthorByName(searchText);
+        }
+    }
+
+    private String searchByTopic() throws Exception {
+        String searchText = view.getSearchField().getText();
+        return apiService.searchByTopic(searchText);
+    }
+
+
+    /**
+     * A reusable ActionListener for search actions.
+     */
     class SearchListener implements ActionListener {
+        private final SearchAction searchAction;
+
+        public SearchListener(SearchAction searchAction) {
+            this.searchAction = searchAction;
+        }
+
         @Override
         public void actionPerformed(ActionEvent e) {
-            String authorName = view.getSearchField().getText();
-            if (authorName == null || authorName.trim().isEmpty()) {
-                view.getResultsArea().setText("Please enter an author's name to search.");
+            String searchText = view.getSearchField().getText();
+            if (searchText == null || searchText.trim().isEmpty()) {
+                view.getResultsList().setModel(new DefaultListModel<>());
                 return;
             }
 
-            // DEBUG: Print to console when the button is clicked.
-            System.out.println("Search button clicked for: " + authorName);
+            view.startLoadingAnimation();
+            view.getSearchByAuthorButton().setEnabled(false);
+            view.getSearchByTopicButton().setEnabled(false);
+            view.getClearButton().setEnabled(false);
 
-            view.getResultsArea().setText("Searching, please wait...");
-
-            SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+            SwingWorker<ScholarApiResponse, Void> worker = new SwingWorker<>() {
                 @Override
-                protected String doInBackground() throws Exception {
-                    // DEBUG: Print a message just before making the API call.
-                    System.out.println("Calling API service...");
-                    return apiService.searchAuthor(authorName);
+                protected ScholarApiResponse doInBackground() throws Exception {
+                    Thread.sleep(1000); // Artificial delay
+                    String jsonResponse = searchAction.execute();
+                    return gson.fromJson(jsonResponse, ScholarApiResponse.class);
                 }
 
                 @Override
                 protected void done() {
                     try {
-                        String jsonResponse = get();
-                        // DEBUG: Print a message when the API call is successful.
-                        System.out.println("API call successful. Response received.");
-                        view.getResultsArea().setText(jsonResponse);
-                    } catch (InterruptedException | ExecutionException ex) {
-                        // --- IMPROVED ERROR HANDLING ---
-                        // This will print the full error details to the console.
-                        System.err.println("An error occurred during the API call:");
-                        ex.printStackTrace();
+                        ScholarApiResponse response = get();
+                        DefaultListModel<Article> listModel = new DefaultListModel<>();
 
-                        // Also, display a more informative message in the UI.
-                        Throwable cause = ex.getCause(); // Get the original exception
-                        view.getResultsArea().setText("An error occurred: \n" + (cause != null ? cause.getMessage() : ex.getMessage()));
+                        if (response != null && response.getOrganicResults() != null) {
+                            List<Article> articles = response.getOrganicResults();
+
+                            // --- SAVE TO DATABASE ---
+                            int articlesToSave = Math.min(articles.size(), 3); // Save up to 3 articles
+                            System.out.println("--- Saving top " + articlesToSave + " articles to database ---");
+                            for (int i = 0; i < articlesToSave; i++) {
+                                Article article = articles.get(i);
+                                DatabaseManager.insertArticle(article);
+                                System.out.println("Saved: " + article.getTitle());
+                            }
+                            System.out.println("------------------------------------");
+
+                            // Populate the list model for the UI
+                            for (Article article : articles) {
+                                listModel.addElement(article);
+                            }
+                        }
+                        view.getResultsList().setModel(listModel);
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(view, "An error occurred: \n" + ex.getCause().getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    } finally {
+                        view.stopLoadingAnimation();
+                        view.getSearchByAuthorButton().setEnabled(true);
+                        view.getSearchByTopicButton().setEnabled(true);
+                        view.getClearButton().setEnabled(true);
                     }
                 }
             };
-
             worker.execute();
         }
     }
